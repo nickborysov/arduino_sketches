@@ -27,7 +27,8 @@ TouchScreen ts = TouchScreen(XP, YP, XM, YM, 300);
 int16_t BOXSIZE;
 int16_t BOTTOM_PANEL = 20;
 int16_t PENRADIUS = 1;
-uint16_t ID, oldcolor, currentcolor;
+uint16_t ID, oldcolor;
+uint16_t currentcolor = TFT_GREEN;
 uint8_t Orientation = 0;    //PORTRAIT
 int Width;
 int Height;
@@ -36,28 +37,14 @@ char *dateFormat = "%04d/%02d/%02d %02d:%02d:%02d";
 int millisDiff;
 uint16_t lastSecond = 0;
 
-// inverted colors
-//#define BLACK   0xFFFF
-//#define BLUE    0xFFE0
-//#define RED     0x07FF
-//#define GREEN   0xF81F
-//#define CYAN    0xF800
-//#define MAGENTA 0x07E0
-//#define YELLOW  0x001F
-//#define WHITE   0x0000
-//#define GRAY    0x4208
-//#define ORANGE  0x02FF
-//#define BROWN   0x8E17
-//#define DBLUE   0xFD00
-//#define EGREEN  0xFC1F
-
 uint16_t Colors[] = {TFT_RED, TFT_YELLOW, TFT_ORANGE, TFT_GREENYELLOW, TFT_GREEN, TFT_CYAN, TFT_BLUE, TFT_MAGENTA, TFT_PURPLE, TFT_WHITE, TFT_LIGHTGREY, TFT_DARKGREY};
 
 void setup(void)
 {
+  pinMode(LED_BUILTIN, OUTPUT);
   RTC_DS3231 RTC;
   RTC.begin();
-  //  RTC.adjust(DateTime(F(__DATE__), F(__TIME__)) + TimeSpan(15));
+//  RTC.adjust(DateTime(F(__DATE__), F(__TIME__)) + TimeSpan(11));
 
   now = RTC.now();
   millisDiff = millis();
@@ -75,14 +62,25 @@ void setup(void)
   Height = tft.height();
 
   BOXSIZE = Width / 12;
-  //  tft.fillScreen(TFT_BLACK);
 
-  for (uint8_t i = 0; i < 12; i++) {
-    tft.fillRect(BOXSIZE * i, 0, BOXSIZE, BOXSIZE, Colors[i]);
+  for (uint8_t i = 0; i < Width; i++) {
+    tft.fillRect(i, 0, 1, BOXSIZE, colorForIndex(i));
+    //    tft.fillRect(i*4, 0, 4, BOXSIZE, (65535 / Width) * 4* i );
   }
+  //  for (uint8_t i = 0; i < 12; i++) {
+  //    tft.fillRect(BOXSIZE * i, 0, BOXSIZE, BOXSIZE, Colors[i]);
+  //  }
   tft.fillRect(0, Height - BOTTOM_PANEL, Width, BOTTOM_PANEL, TFT_BLACK);
   tft.drawRect(0, Height - BOTTOM_PANEL, Width, BOTTOM_PANEL, TFT_RED);
-  currentcolor = TFT_GREEN;
+}
+
+uint16_t colorForIndex(uint8_t i) {
+  float frequency = .056;
+  uint8_t r = (sin(frequency * i + 0) * 127 + 128) / ((i / 120) + 1);
+  uint8_t g = (sin(frequency * i + 2) * 127 + 128) / ((i / 120) + 1);
+  uint8_t b = (sin(frequency * i + 4) * 127 + 128) / ((i / 120) + 1);
+
+  return tft.color565(r, g, b);
 }
 
 uint16_t xpos, ypos;  //screen coordinates
@@ -127,15 +125,19 @@ void loop()
     // Touch panels with icon area e.g. > h - 0
     if (ypos > Height - 0) {
       if (xpos < Width * 0.25 ) {
-        // press the bottom of the screen to erase
-        saveScreen();
+        digitalWrite(LED_BUILTIN, LOW);
+        //                saveScreen();
+
       } else if (xpos < Width * 0.5 ) {
         PENRADIUS--;
+
         delay(200);
       } else if (xpos < Width * 0.75 ) {
         PENRADIUS++;
         delay(200);
       } else if (xpos > Width * 0.75 ) {
+        digitalWrite(LED_BUILTIN, HIGH);
+        // press the bottom of the screen to erase
         tft.fillRect(0, BOXSIZE, Width, Height - BOXSIZE - BOTTOM_PANEL, TFT_BLACK);
       }
       return;
@@ -146,17 +148,19 @@ void loop()
 
     // are we in top color box area ?
     if (ypos < BOXSIZE) {               //draw white border on selected color box
-      uint16_t boxIndex = xpos / BOXSIZE;
-      oldcolor = currentcolor;
-      currentcolor = Colors[boxIndex];
-      tft.drawRect(BOXSIZE * boxIndex, 0, BOXSIZE, BOXSIZE, TFT_WHITE);
-      if (oldcolor != currentcolor) { //rub out the previous white border
-        for (uint8_t i = 0; i < 12; i++) {
-          if (oldcolor ==  Colors[i]) {
-            tft.fillRect(BOXSIZE * i, 0, BOXSIZE, BOXSIZE, Colors[i]);
-          }
-        }
-      }
+      currentcolor = colorForIndex(xpos);
+      // uint16_t boxIndex = xpos / BOXSIZE;
+      // oldcolor = currentcolor;
+      // currentcolor = ypos * Width / 2;
+      //      currentcolor = Colors[boxIndex];
+      //      tft.drawRect(BOXSIZE * boxIndex, 0, BOXSIZE, BOXSIZE, TFT_WHITE);
+      //      if (oldcolor != currentcolor) { //rub out the previous white border
+      //        for (uint8_t i = 0; i < 12; i++) {
+      //          if (oldcolor ==  Colors[i]) {
+      //            tft.fillRect(BOXSIZE * i, 0, BOXSIZE, BOXSIZE, Colors[i]);
+      //          }
+      //        }
+      //      }
     }
     // are we in drawing area ?
     if (((ypos - PENRADIUS) > BOXSIZE) && ((ypos + PENRADIUS) < Height - BOTTOM_PANEL)) {
@@ -238,7 +242,7 @@ void saveScreen() {
     //    Serial.println("File wasn't saved.");
     return;
   }
-  Serial.println("File saved");
+  //  Serial.println("File saved");
   free(fileName);
   SD.end();
 }
@@ -252,7 +256,7 @@ void showTime() {
   lastSecond = current.second();
   char *data = new char[20];
   sprintf(data, dateFormat, current.year(), current.month(), current.day() , current.hour(), current.minute(), current.second());
-  drawText(data, 5, Height - BOTTOM_PANEL, Colors[current.second() % 12] , TFT_BLACK);
+  drawText(data, 5, Height - BOTTOM_PANEL, uint16_t((millis() * 10) % 65535), TFT_BLACK);
   delete data;
 }
 
