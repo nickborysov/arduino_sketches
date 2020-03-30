@@ -144,6 +144,7 @@ void readBmpImage() {
         }
         tft.fillRect(x + (i * blockSize), y, 1, 1, color);
       }
+      handleTouch();
     }
     if ((y % 5) == 0) {
       showTime();
