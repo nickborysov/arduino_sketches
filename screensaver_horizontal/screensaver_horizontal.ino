@@ -17,24 +17,30 @@ DateTime now;
 MCUFRIEND_kbv tft;       // hard-wired for UNO shields anyway.
 int Width;
 int Height;
-File root;
 int millisDiff;
 int16_t BOTTOM_PANEL = 20;
+
+File root;
 File file;
+
+uint8_t *block;
+uint16_t *colorBuffer;
+
+const char dateFormat[] PROGMEM = "%04d/%02d/%02d %02d:%02d:%02d";
+uint16_t lastSecond = 0;
 
 void setupRTC() {
   RTC_DS3231 RTC;
   Wire.begin();
   RTC.begin();
-//      RTC.adjust(DateTime(__DATE__, __TIME__) + TimeSpan(14));
-
+  // RTC.adjust(DateTime(__DATE__, __TIME__) + TimeSpan(14));
   now = RTC.now();
   millisDiff = millis();
 }
 
 void setup() {
   setupRTC();
-  // put your setup code here, to run once:
+  
   Serial.begin(9600);
 
   tft.reset();
@@ -63,7 +69,6 @@ void setup() {
   }
 
   root = SD.open("/");
-
   // Read random image on start.
   uint8_t n = millis() % 5;
   for (uint8_t i = 0; i < n; i++) {
@@ -101,10 +106,6 @@ bool nextFile(File dir) {
   return false;
 }
 
-uint8_t *block;
-uint16_t *colorBuffer;
-char *textBuffer = new char[30];
-
 void readBmpImage() {
   printFreeRAM(F("Free memory on start is: %d"));
   int imageWidth, imageHeight;
@@ -120,30 +121,34 @@ void readBmpImage() {
     Serial.println(F("Invalid image size"));
     return;
   }
+  
+  char *textBuffer = new char[30];
   sprintf_P(textBuffer, (PGM_P)F("Image size is %04u x %04u"), imageWidth, imageHeight);
   Serial.println(textBuffer);
+  delete textBuffer;
 
-  uint16_t blockSize = imageWidth / 8;
+  uint16_t blockSize = imageWidth / 16;
+  uint8_t colorBufferMultiplier = 8;
+  uint16_t colorBufferSize = blockSize * colorBufferMultiplier;
   block = new uint8_t[blockSize * 3];
-  colorBuffer = new uint16_t[blockSize * 2];
+  colorBuffer = new uint16_t[colorBufferSize];
   for (uint16_t y = imageHeight - 1; y > 0; y--) {
     for (uint16_t i = 0; i < imageWidth / blockSize; i++ ) {
       file.readBytes(block, blockSize * 3);
-
 
       if (y >= Height - BOTTOM_PANEL) {
         continue;
       }
 
       for (uint8_t j = 0; j < blockSize; j++ ) {
-        colorBuffer[((i % 2)) * blockSize + j] =  tft.color565(block[j * 3 + 2], block[j * 3 + 1], block[j * 3]);
+        colorBuffer[((i % colorBufferMultiplier)) * blockSize + j] =  tft.color565(block[j * 3 + 2], block[j * 3 + 1], block[j * 3]);
       }
-      if (i % 2 == 0) {
+      if (i % colorBufferMultiplier < colorBufferMultiplier - 1) {
         continue;
       }
-      uint16_t startX = ((i - 1) * blockSize);
-      tft.setAddrWindow(startX, y, startX + blockSize * 2, y);
-      tft.pushColors(colorBuffer, blockSize * 2, 1);
+      uint16_t startX = ((i + 1 - colorBufferMultiplier) * blockSize);
+      tft.setAddrWindow(startX, y, startX + colorBufferSize, y);
+      tft.pushColors(colorBuffer, colorBufferSize, 1);
     }
     if ((y % 10) == 0 && y < Height - BOTTOM_PANEL) {
       showTime();
@@ -163,8 +168,10 @@ void readBmpImage() {
 void readRandomImage() {
   printFreeRAM(F("Free memory before start is: %d"));
   if (nextFile(root)) {
+    char *textBuffer = new char[30];
     sprintf_P(textBuffer, (PGM_P)F("Next image is %s"), file.name());
     Serial.println(textBuffer);
+    delete textBuffer;
     tft.fillScreen(TFT_BLACK);
     readBmpImage();
   } else {
@@ -180,8 +187,10 @@ void loop() {
 }
 
 void printFreeRAM(const __FlashStringHelper* message) {
+  char *textBuffer = new char[30];
   sprintf_P(textBuffer, (PGM_P)message, freeRAM());
   Serial.println(textBuffer);
+  delete textBuffer;
 }
 
 int freeRAM() {
@@ -190,17 +199,13 @@ int freeRAM() {
   return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval);
 }
 
-
-const char dateFormat[] PROGMEM = "%04d/%02d/%02d %02d:%02d:%02d";
-uint16_t lastSecond = 0;
-uint16_t *lastColor = new uint16_t[1];
-
 void showTime() {
   DateTime current = now + TimeSpan((millis() - millisDiff) / 1000);
   if (lastSecond == current.second()) {
     return;
   }
   lastSecond = current.second();
+  char *textBuffer = new char[20];
   sprintf_P(textBuffer, dateFormat, current.year(), current.month(), current.day() , current.hour(), current.minute(), current.second());
   tft.fillRect(0, Height - BOTTOM_PANEL, Width, BOTTOM_PANEL, TFT_BLACK);
 
@@ -209,5 +214,6 @@ void showTime() {
   tft.setCursor(3, Height - BOTTOM_PANEL + 15);
 
   tft.print(textBuffer);
+  delete textBuffer;
   //  printFreeRAM(F("Free memory show time is: %d"));
 }
