@@ -1,14 +1,24 @@
 
 #include "Adafruit_GFX.h"
-#include "Fonts/Org_01.h"
 #include "RTClib.h"
 #include <MCUFRIEND_kbv.h>
-#include <SD.h>
-#include <SPI.h>
+//#include <SD.h>
+//#include <SPI.h>
 #include <Wire.h>
+//#include "Fonts/Org_01.h"
 
-#define CUSTOM_FONT Org_01
-#define TEXT_SIZE 3
+#include "Fonts/FreeMono12pt7b.h"
+
+#include "DHT.h"
+
+#define DHTPIN 12 // Digital pin connected to the DHT sensor
+
+#define DHTTYPE DHT11
+DHT dht(DHTPIN, DHTTYPE);
+
+
+#define CUSTOM_FONT FreeMono12pt7b
+#define TEXT_SIZE 1
 #define Orientation 1 // PORTRAIT
 
 // Date and time functions using a PCF8523 RTC connected via I2C and Wire lib
@@ -20,12 +30,6 @@ int Height;
 int millisDiff;
 int16_t BOTTOM_PANEL = 20;
 
-File root;
-File file;
-
-uint8_t *block;
-uint16_t *colorBuffer;
-
 const char dateFormat[] PROGMEM = "%04d/%02d/%02d %02d:%02d:%02d";
 uint16_t lastSecond = 0;
 
@@ -33,7 +37,7 @@ void setupRTC() {
   RTC_DS3231 RTC;
   Wire.begin();
   RTC.begin();
-  // RTC.adjust(DateTime(__DATE__, __TIME__) + TimeSpan(14));
+//   RTC.adjust(DateTime(__DATE__, __TIME__) + TimeSpan(14));
   now = RTC.now();
   millisDiff = millis();
 }
@@ -59,132 +63,109 @@ void setup() {
   Width = tft.width();
   Height = tft.height();
 
-  // Setup pin for SD-card from data logger.
-  pinMode(10, OUTPUT);
-
-  if (!SD.begin(10)) {
-    Serial.println(F("Card Failure"));
-    return;
-  }
-
-  root = SD.open("/");
-  // Read random image on start.
-  uint8_t n = millis() % 5;
-  for (uint8_t i = 0; i < n; i++) {
-    if (!nextFile(root)) {
-      break;
-    }
-    file.close();
-  }
-  readRandomImage();
+  dht.begin();
 }
 
-bool nextFile(File dir) {
-  uint16_t randomFileNumber = uint16_t(millis() % 10);
-  uint16_t i = 0;
-  while (true) {
-    File entry = dir.openNextFile();
-    if (!entry) {
-      dir.rewindDirectory();
-      continue;
-    }
-    if (i < randomFileNumber) {
-      i++;
-      entry.close();
-      continue;
-    }
-    String fileName = entry.name();
-    if ((fileName.lastIndexOf(".bmp") == -1 &&
-         fileName.lastIndexOf(".BMP") == -1)) {
-      entry.close();
-      continue;
-    }
-    file = entry;
-    return true;
-  }
-  return false;
-}
 
-void readBmpImage() {
-  printFreeRAM(F("Free memory on start is: %d"));
-  int imageWidth, imageHeight;
-  {
-    uint8_t *header = new uint8_t[54];
-    file.readBytes(header, 54);
-    imageWidth = header[18] | (header[19] << 8) | (header[20] << 16);
-    imageHeight = header[22] | (header[23] << 8) | (header[24] << 16);
-    delete header;
-  }
+long lastSecondForTemp;
 
-  if (imageWidth > 320 || imageHeight > 240) {
-    Serial.println(F("Invalid image size"));
-    return;
-  }
-
-  char *textBuffer = new char[30];
-  sprintf_P(textBuffer, (PGM_P)F("Image size is %04u x %04u"), imageWidth,
-            imageHeight);
-  Serial.println(textBuffer);
-  delete textBuffer;
-
-  uint16_t blockSize = imageWidth / 16;
-  uint8_t colorBufferMultiplier = 8;
-  uint16_t colorBufferSize = blockSize * colorBufferMultiplier;
-  block = new uint8_t[blockSize * 3];
-  colorBuffer = new uint16_t[colorBufferSize];
-  for (uint16_t y = imageHeight - 1; y > 0; y--) {
-    for (uint16_t i = 0; i < imageWidth / blockSize; i++) {
-      file.readBytes(block, blockSize * 3);
-
-      if (y >= Height - BOTTOM_PANEL) {
-        continue;
-      }
-
-      for (uint8_t j = 0; j < blockSize; j++) {
-        colorBuffer[((i % colorBufferMultiplier)) * blockSize + j] =
-            tft.color565(block[j * 3 + 2], block[j * 3 + 1], block[j * 3]);
-      }
-      if (i % colorBufferMultiplier < colorBufferMultiplier - 1) {
-        continue;
-      }
-      uint16_t startX = ((i + 1 - colorBufferMultiplier) * blockSize);
-      tft.setAddrWindow(startX, y, startX + colorBufferSize, y);
-      tft.pushColors(colorBuffer, colorBufferSize, 1);
-    }
-    if ((y % 10) == 0 && y < Height - BOTTOM_PANEL) {
-      showTime();
-    }
-    if (y == imageHeight / 2) {
-      printFreeRAM(F("Free memory in progress is: %d"));
-    }
-  }
-
-  file.close();
-  delete block;
-  delete colorBuffer;
-
-  printFreeRAM(F("Free memory on finish is: %d"));
-}
-
-void readRandomImage() {
-  printFreeRAM(F("Free memory before start is: %d"));
-  if (nextFile(root)) {
-    char *textBuffer = new char[30];
-    sprintf_P(textBuffer, (PGM_P)F("Next image is %s"), file.name());
-    Serial.println(textBuffer);
-    delete textBuffer;
-    tft.fillScreen(TFT_BLACK);
-    readBmpImage();
-  } else {
-    Serial.println(F("no file found"));
-  }
-}
 
 void loop() {
-  if ((now + TimeSpan((millis() - millisDiff) / 1000)).second() > 55) {
-    readRandomImage();
-  }
   showTime();
+
+  if (millis() / 1000 % 60 != lastSecondForTemp) {
+    lastSecondForTemp = millis() / 1000 % 60;
+
+    printLocalTemp();
+  }
+}
+
+const  uint8_t humBitmapArray[] PROGMEM = {
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x80, 0x00,
+  0x00, 0x01, 0x80, 0x00, 0x00, 0x03, 0xc0, 0x00, 0x00, 0x07, 0xe0, 0x00, 0x00, 0x07, 0xe0, 0x00,
+  0x00, 0x0c, 0xf0, 0x00, 0x00, 0x18, 0xf8, 0x00, 0x00, 0x39, 0xfc, 0x00, 0x00, 0x31, 0xfc, 0x00,
+  0x00, 0x63, 0xfe, 0x00, 0x00, 0xe7, 0xff, 0x00, 0x00, 0xc7, 0xff, 0x00, 0x01, 0x8f, 0xff, 0x80,
+  0x01, 0x9f, 0xff, 0x80, 0x01, 0x9f, 0xff, 0x80, 0x03, 0x3f, 0xff, 0xc0, 0x03, 0x3f, 0xff, 0xc0,
+  0x03, 0x3f, 0xff, 0xc0, 0x03, 0x3f, 0xff, 0xc0, 0x03, 0x3f, 0xff, 0xc0, 0x01, 0xff, 0xff, 0x80,
+  0x01, 0xff, 0xff, 0x80, 0x00, 0xff, 0xff, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x7f, 0xfe, 0x00,
+  0x00, 0x1f, 0xf8, 0x00, 0x00, 0x07, 0xe0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+const uint8_t tempBitmapArray[] PROGMEM = {
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xc0, 0x00, 0x00, 0x07, 0xe0, 0x00,
+  0x00, 0x0e, 0x70, 0x00, 0x00, 0x0c, 0x37, 0xc0, 0x00, 0x0c, 0x37, 0xc0, 0x00, 0x0c, 0x30, 0x00,
+  0x00, 0x0c, 0x30, 0x00, 0x00, 0x0c, 0x37, 0xc0, 0x00, 0x0c, 0x37, 0xc0, 0x00, 0x0c, 0x30, 0x00,
+  0x00, 0x0c, 0x30, 0x00, 0x00, 0x0c, 0x37, 0xc0, 0x00, 0x0c, 0x37, 0xc0, 0x00, 0x0c, 0x30, 0x00,
+  0x00, 0x0c, 0x30, 0x00, 0x00, 0x0c, 0x37, 0xc0, 0x00, 0x0c, 0x37, 0xc0, 0x00, 0x0c, 0x30, 0x00,
+  0x00, 0x1c, 0x38, 0x00, 0x00, 0x18, 0x18, 0x00, 0x00, 0x30, 0x0c, 0x00, 0x00, 0x30, 0x0c, 0x00,
+  0x00, 0x30, 0x0c, 0x00, 0x00, 0x30, 0x0c, 0x00, 0x00, 0x18, 0x18, 0x00, 0x00, 0x1c, 0x38, 0x00,
+  0x00, 0x0f, 0xf0, 0x00, 0x00, 0x03, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+float oldHum, oldTemp, oldHic;
+
+void printLocalTemp() {
+  //  printFreeRAM(F("printLocalTemp %d"));
+  // Reading temperature or humidity takes about 250 milliseconds!
+  // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
+  float h = dht.readHumidity();
+  // Read temperature as Celsius (the default)
+  float t = dht.readTemperature();
+
+  // Check if any reads failed and exit early (to try again).
+  if (isnan(h) || isnan(t)) {
+    Serial.println(F("Failed to read from DHT sensor!"));
+    return;
+  }
+
+  // Compute heat index in Celsius (isFahreheit = false)
+  float hic = dht.computeHeatIndex(t, h, false);
+
+  char *textBuffer = new char[25];
+
+  if (oldHum != h ) {
+    oldHum = h;
+    char* hum_str = new char[5];
+    dtostrf(h, 4, 1, hum_str);
+
+    sprintf(textBuffer, "Humidity:    %s", hum_str);
+    tft.setTextColor(TFT_BLUE, TFT_BLUE);
+    tft.fillRect(0, 0, Width, 32, TFT_BLACK);
+    tft.drawBitmap(Width - 75, 0, humBitmapArray, 32, 32, TFT_BLUE);
+    tft.setCursor(3, 15 + 10);
+    tft.print(textBuffer);
+    delete hum_str;
+  }
+
+  if (oldTemp != t ) {
+    oldTemp = t;
+    char* temp_str = new char[5];
+    dtostrf(t, 4, 1, temp_str);
+
+    sprintf(textBuffer, "Temperature: %s", temp_str);
+    tft.setTextColor(TFT_GREEN, TFT_GREEN);
+    tft.fillRect(0, 32, Width, 32, TFT_BLACK);
+    tft.drawBitmap(Width - 75, 32, tempBitmapArray, 32, 32, TFT_GREEN);
+    tft.setCursor(3, 32 + 15 + 10);
+    tft.print(textBuffer);
+    delete temp_str;
+  }
+
+  if (oldHic != hic) {
+    oldHic = hic;
+    char* hic_str = new char[5];
+    dtostrf(hic, 4, 1, hic_str);
+
+    sprintf(textBuffer, "Feels like:  %s", hic_str);
+    tft.setTextColor(TFT_DARKCYAN, TFT_DARKCYAN);
+    tft.fillRect(0, 32 * 2, Width, 32, TFT_BLACK);
+    tft.drawBitmap(Width - 75, 32 * 2, tempBitmapArray, 32, 32, TFT_DARKCYAN);
+    tft.setCursor(3, 32 * 2 + 15 + 10);
+    tft.print(textBuffer);
+    delete hic_str;
+  }
+
+  delete textBuffer;
 }
 
 void printFreeRAM(const __FlashStringHelper *message) {
@@ -209,12 +190,12 @@ void showTime() {
   char *textBuffer = new char[20];
   sprintf_P(textBuffer, dateFormat, current.year(), current.month(),
             current.day(), current.hour(), current.minute(), current.second());
-  tft.fillRect(0, Height - BOTTOM_PANEL, Width, BOTTOM_PANEL, TFT_BLACK);
 
   uint16_t textColor = uint16_t((millis() * 10) % 65535);
   tft.setTextColor(textColor, textColor);
   tft.setCursor(3, Height - BOTTOM_PANEL + 15);
 
+  tft.fillRect(0, Height - BOTTOM_PANEL, Width, BOTTOM_PANEL, TFT_BLACK);
   tft.print(textBuffer);
   delete textBuffer;
   //  printFreeRAM(F("Free memory show time is: %d"));
