@@ -23,6 +23,7 @@ bool wasLoaded;
 //DynamicJsonDocument openweatherDoc(6556);
 char* accuweatherUpdate = new char[512];
 char* openweatherUpdate = new char[512];
+String sensorUpdate;
 const long millisInHour = 60 * 60 * 1000;
 
 
@@ -63,8 +64,9 @@ void handleGetData() {
   printFreeRAM(F("handle data %d"));
 
   StaticJsonDocument<1024> doc;
-  doc["Accuweather_forecast"] = accuweatherUpdate;
-  doc["Openweather_forecast"] = openweatherUpdate;
+  doc["Accuweather forecast"] = accuweatherUpdate;
+  doc["Openweather forecast"] = openweatherUpdate;
+  doc["Sensor"] = sensorUpdate;
 
   String json;
   serializeJson(doc, json);
@@ -104,6 +106,15 @@ void loop() {
     if (command.equals("openweather")) {
       Serial.print("weather#");
       Serial.println(openweatherUpdate);
+    }
+    if (command.startsWith("sensor")) {
+      //      format of command sensor should be 'sensorXXX:timestamp:value'
+      String timeStamp = command.substring(10, 20);
+      String value = command.substring(21, 26);
+      Serial.println(timeStamp);
+      Serial.println(value);
+
+      sensorUpdate = sensorUpdate + timeStamp + ":" + value + ";";
     }
     printFreeRAM(F("end command %d"));
   }
@@ -295,6 +306,7 @@ void setupHtml() {
 
         function loadPage() {
             loadWeatherData();
+            setTimeout(loadPage, 1000);
             // showWeatherData(testResp);
         }
         function loadWeatherData() {
