@@ -69,15 +69,11 @@
 
     <script>
 
-        const testResp = {
-            "OpenWeather forecast": "1595541600:14.30;1595545200:13.50;1595548800:13.90;1595552400:12.10;1595556000:13.00;1595559600:13.70;1595563200:15.80;1595566800:18.00;1595570400:20.00;1595574000:21.10;1595577600:21.80;1595581200:22.40;",
-            "AccuWeather forecast": "1595581200:21.83;1595667600:24.11;1595754000:27.39;1595840400:28.03;1595926800:29.20;1596013200:26.86;1596099600:27.47;1596186000:29.83",
-            "OneWire sensor": "1595581200:21.83;"
-        }
+        const testResp = {"accuweather": [{"timestamp": 1596063600, "temperature": 22.1}, {"timestamp": 1596067200, "temperature": 21.4}, {"timestamp": 1596070800, "temperature": 20.8}, {"timestamp": 1596074400, "temperature": 20.2}, {"timestamp": 1596078000, "temperature": 21.3}, {"timestamp": 1596081600, "temperature": 23.2}, {"timestamp": 1596085200, "temperature": 25}, {"timestamp": 1596088800, "temperature": 26.5}, {"timestamp": 1596092400, "temperature": 27.6}, {"timestamp": 1596096000, "temperature": 28.7}, {"timestamp": 1596099600, "temperature": 29.5}, {"timestamp": 1596103200, "temperature": 30.5}], "openweather": [{"timestamp": 1596099600, "temperature": 29.81, "humidity": 38}, {"timestamp": 1596186000, "temperature": 22.74, "humidity": 65}, {"timestamp": 1596272400, "temperature": 21.46, "humidity": 54}, {"timestamp": 1596358800, "temperature": 20.09, "humidity": 68}, {"timestamp": 1596445200, "temperature": 22.13, "humidity": 41}, {"timestamp": 1596531600, "temperature": 25.1, "humidity": 36}, {"timestamp": 1596618000, "temperature": 26.3, "humidity": 38}, {"timestamp": 1596704400, "temperature": 26.94, "humidity": 43}]}
+
 
         function loadPage() {
-            loadWeatherData();
-            setTimeout(loadPage, 1000);
+            setInterval(loadWeatherData, 1000);
             // showWeatherData(testResp);
         }
         function loadWeatherData() {
@@ -87,8 +83,13 @@
             Http.send();
 
             Http.onreadystatechange = (e) => {
-                let resp = JSON.parse(Http.responseText);
-                showWeatherData(resp);
+                try {
+                    let resp = JSON.parse(Http.responseText);
+                    showWeatherData(resp);
+                } catch (e) {
+                    console.log(e);
+                    console.log(Http.responseText);
+                }
             }
         }
         function showWeatherData(data) {
@@ -97,8 +98,17 @@
             for (const key in data) {
                 const element = data[key];
 
-                var espResp = parseESPForecast(key, element);
-                resp = resp.concat(espResp);
+                element.forEach(item => {
+                    if (item === '') {
+                        return;
+                    }
+                    resp = resp.concat({
+                        type: key,
+                        date: new Date(item.timestamp * 1000),
+                        temp: item.temperature,
+                        humidity: item.humidity
+                    });
+                });
             }
             resp.sort((item1, item2) => {
                 if (item1.date > item2.date) return 1;
@@ -139,26 +149,6 @@
                 weatherTable.appendChild(row);
             });
         }
-
-
-        function parseESPForecast(type, data) {
-            var resp = [];
-            var weatherItems = data.split(";");
-            weatherItems.forEach(item => {
-                if (item === '') {
-                    return;
-                }
-                weatherData = item.split(":");
-                resp = resp.concat({
-                    type: type,
-                    date: new Date(weatherData[0] * 1000),
-                    temp: weatherData[1]
-                });
-            });
-            return resp;
-        }
-
-
     </script>
 
     <title>Home weather</title>
