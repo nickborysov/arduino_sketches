@@ -117,7 +117,7 @@ void loop()
       JsonArray weatherRepsArray;
       if (weatherJSON.containsKey(sensorId))
       {
-        weatherRepsArray = weatherJSON[sensorId].as<JsonArray>();
+        weatherRepsArray = weatherJSON[sensorId.c_str()].as<JsonArray>();
       }
       else
       {
