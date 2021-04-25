@@ -9,5 +9,14 @@
         "https://raw.githubusercontent.com/VSChina/azureiotdevkit_tools/master/package_azureboard_index.json",
         "http://arduino.esp8266.com/stable/package_esp8266com_index.json"
     ],
-    "arduino.defaultBaudRate": 74880
+    "arduino.defaultBaudRate": 74880,
+    "files.associations": {
+        "initializer_list": "cpp",
+        "algorithm": "cpp",
+        "bitset": "cpp",
+        "future": "cpp",
+        "memory": "cpp",
+        "optional": "cpp",
+        "random": "cpp"
+    }
 }
