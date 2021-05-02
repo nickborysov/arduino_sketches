@@ -19,10 +19,6 @@ DHT dht(DHTPIN, DHTTYPE);
 #define ONE_WIRE_BUS 11
 OneWire ds(ONE_WIRE_BUS);
 
-#define ESP_RX 8
-#define ESP_TX 9
-SoftwareSerial ESPserial(ESP_RX, ESP_TX); // RX | TX
-
 // Date and time functions using a PCF8523 RTC connected via I2C and Wire lib
 DateTime now;
 
@@ -35,10 +31,11 @@ int16_t BOTTOM_PANEL = 50;
 // const char dateFormat[] PROGMEM = "%04d/%02d/%02d %02d:%02d:%02d";
 const char dateFormat[] PROGMEM = "%02d/%02d %02d:%02d:%02d";
 uint16_t lastSecond = 0;
+uint16_t lastMinute = -1;
+uint16_t timeTextColor = 0;
 long lastSecondForTemp;
+
 float oldValues[5] = {0, 0, 0, 0, 0};
-// const char accuCommand[] PROGMEM = "accuweather";
-const char openCommand[] PROGMEM = "openweather";
 
 void setupRTC()
 {
@@ -55,7 +52,6 @@ void setup()
   setupRTC();
 
   Serial.begin(9600);
-  ESPserial.begin(74880);
 
   tft.reset();
   tft.begin(tft.readID());
@@ -69,8 +65,16 @@ void setup()
   dht.begin();
 }
 
+bool needToDrawTepmlates = true;
+
 void loop()
 {
+  if (needToDrawTepmlates)
+  {
+    drawTemplates();
+    needToDrawTepmlates = false;
+  }
+
   showTime();
 
   if (millis() / 1000 % 60 != lastSecondForTemp)
@@ -81,43 +85,6 @@ void loop()
 
     // loadWeather();
     drawScreenRect();
-  }
-}
-
-void loadWeather()
-{
-  Serial.println("select command");
-  ESPserial.write(openCommand);
-  uint8_t atempts = 10;
-  while (atempts > 0)
-  {
-    Serial.println(ESPserial.available());
-    if (!ESPserial.available())
-    {
-      atempts--;
-      delay(1);
-      continue;
-    }
-    String jsonString = ESPserial.readStringUntil('\n');
-    Serial.println(jsonString);
-    DynamicJsonDocument weatherJSON(600);
-    DeserializationError err = deserializeJson(weatherJSON, jsonString);
-    if (err)
-    {
-      Serial.println(err.c_str());
-      Serial.println("error: " + jsonString);
-      return;
-    }
-    JsonArray array = weatherJSON.as<JsonArray>();
-    if (array.size() == 0)
-    {
-      return;
-    }
-    JsonObject item = array[0].as<JsonObject>();
-    //  long timeStamp = item["timestamp"];
-    float temp = item["temperature"];
-    drawSensorValue(temp, "Forecast:%s", TFT_MAGENTA, tempBitmapArray, 4);
-    break;
   }
 }
 
@@ -143,7 +110,7 @@ float getOneWireTemp()
 
 void printLocalTemp()
 {
-  printFreeRAM(F("on start printLocalTemp %d"));
+  // printFreeRAM(F("on start printLocalTemp %d"));
   // Reading temperature or humidity takes about 250 milliseconds!
   // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
   float hum = dht.readHumidity();
@@ -167,63 +134,82 @@ void printLocalTemp()
   if (oldValues[0] != hum)
   {
     oldValues[0] = hum;
-    drawSensorValue(hum, "Humid:  %d.%d", TFT_BLUE, humBitmapArray, 0);
+    drawSensorValue(hum, TFT_BLUE, 0);
   }
 
 
   if (oldValues[1] != temp)
   {
     oldValues[1] = temp;
-    drawSensorValue(temp, "Temp 1: %d.%d", TFT_GREEN, tempBitmapArray, 1);
+    drawSensorValue(temp, TFT_GREEN, 1);
   }
 
   if (oldValues[2] != hic)
   {
     oldValues[2] = hic;
-    drawSensorValue(hic, "Feel 1: %d.%d", TFT_DARKCYAN, tempBitmapArray, 2);
+    drawSensorValue(hic, TFT_DARKCYAN, 2);
   }
 
   
   if (oldValues[3] != oneWireTemp)
   {
-    oldValues[3] = oneWireTemp; 
-    drawSensorValue(oneWireTemp, "Temp 2: %d.%d", TFT_GREENYELLOW, tempBitmapArray, 3);
+    oldValues[3] = oneWireTemp;
+    drawSensorValue(oneWireTemp, TFT_GREENYELLOW, 3);
   }
   
   if (oldValues[4] != oneWireHic)
   {
-    oldValues[4] = oneWireHic; 
-    drawSensorValue(oneWireHic, "Feel 2: %d.%d", TFT_CYAN, tempBitmapArray, 4);
+    oldValues[4] = oneWireHic;
+    drawSensorValue(oneWireHic, TFT_CYAN, 4);
   }
   
   printFreeRAM(F("on end printLocalTemp %d"));
 }
 
-void drawSensorValue(float value, const char *text, uint16_t color, const uint8_t *bitmap, uint8_t line)
+void drawTemplates()
 {
+  drawSensorTemplate("Humid:", TFT_BLUE, humBitmapArray, 0);
+  drawSensorTemplate("Temp 1:", TFT_GREEN, tempBitmapArray, 1);
+  drawSensorTemplate("Feel 1:", TFT_DARKCYAN, tempBitmapArray, 2);
+  drawSensorTemplate("Temp 2:", TFT_GREENYELLOW, tempBitmapArray, 3);
+  drawSensorTemplate("Feel 2:", TFT_CYAN, tempBitmapArray, 4);
+}
 
-  const uint16_t cursorOffsetX = 18;
-  const uint16_t cursorOffsetY = 20;
+void drawSensorTemplate(const char *text, uint16_t color, const uint8_t *bitmap, uint8_t line)
+{
+  const uint16_t cursorOffsetX = 25;
+  const uint16_t cursorOffsetY = 25;
   const uint16_t bitmapSizeX = 32;
   const uint16_t bitmapSizeY = 32;
-  const uint16_t bitmapPositionX = tft.width() - 75 + 10;
-  const uint16_t bitmapPositionY = 0 + 10;
-  const uint16_t boxPositionX = 0 + 10;
-  const uint16_t boxPositionY = 0 + 10;
-  const uint16_t boxSizeX = tft.width() - 30;
+  const uint16_t bitmapPositionX = 260;
+  const uint16_t bitmapPositionY = 20;
+
+  tft.setTextColor(color, color);
+  tft.drawBitmap(bitmapPositionX, bitmapPositionY + bitmapSizeY * line, bitmap, bitmapSizeX, bitmapSizeY, color);
+  tft.setCursor(cursorOffsetX, cursorOffsetY + bitmapSizeY * line);
+  tft.print(text);
+}
+
+void drawSensorValue(float value, uint16_t color, uint8_t line)
+{
+  const uint16_t cursorOffsetX = 170;
+  const uint16_t cursorOffsetY = 25;
+  const uint16_t boxPositionX = 170;
+  const uint16_t boxPositionY = 15;
+  const uint16_t boxSizeX = 70;
   const uint16_t boxSizeY = 32;
 
-  char *textBuffer = new char[25];
+  char *textBuffer = new char[6];
+  char *text = "%d.%d";
 
-  sprintf(textBuffer, text, uint16_t((value*10)/10), uint16_t(uint16_t(value*10)%10));
-  tft.setTextColor(color, color);
+  sprintf(textBuffer, text, uint16_t((value * 10) / 10), uint16_t(uint16_t(value * 10) % 10));
+
   tft.fillRect(boxPositionX, boxPositionY + boxSizeY * line, boxSizeX, boxSizeY, TFT_BLACK);
-  tft.drawBitmap(bitmapPositionX, bitmapPositionY + boxSizeY * line, bitmap, bitmapSizeX, bitmapSizeY, color);
+  tft.setTextColor(color, color);
   tft.setCursor(cursorOffsetX, cursorOffsetY + boxSizeY * line);
   tft.print(textBuffer);
 
-  delete textBuffer, text, bitmap;
-
+  delete textBuffer, text;
 }
 
 void showTime()
@@ -234,17 +220,36 @@ void showTime()
     return;
   }
   lastSecond = current.second();
+
+  if (lastMinute == current.minute())
+  {
+    // re-draw second only
+    tft.setTextColor(timeTextColor, timeTextColor);
+    const uint16_t secondPositionX = 25 + 12 * 18;
+    const uint16_t secondPositionSize = 2 * 18;
+    tft.setCursor(secondPositionX, tft.height() - BOTTOM_PANEL);
+    tft.fillRect(secondPositionX, tft.height() - BOTTOM_PANEL, secondPositionSize, BOTTOM_PANEL - 28, TFT_BLACK);
+
+    char *textBuffer = new char[2];
+    sprintf(textBuffer, "%02d", current.second());
+    tft.print(textBuffer);
+    delete textBuffer;
+
+    return;
+  }
+  lastMinute = current.minute();
+
   char *textBuffer = new char[20];
   sprintf_P(textBuffer, dateFormat, current.day(), current.month(), current.hour(), current.minute(), current.second());
 
-  uint16_t textColor = uint16_t((millis() * 10) % 65535);
-  tft.setTextColor(textColor, textColor);
-  tft.setCursor(20, tft.height() - BOTTOM_PANEL);
+  timeTextColor = uint16_t((millis() * 10) % 65535);
+  tft.setTextColor(timeTextColor, timeTextColor);
+  tft.setCursor(25, tft.height() - BOTTOM_PANEL);
 
-  tft.fillRect(20, tft.height() - BOTTOM_PANEL, tft.width() - 30, BOTTOM_PANEL - 28, TFT_BLACK);
+  tft.fillRect(25, tft.height() - BOTTOM_PANEL, tft.width() - 30, BOTTOM_PANEL - 28, TFT_BLACK);
   tft.print(textBuffer);
   delete textBuffer;
-  printFreeRAM(F("Free memory show time is: %d"));
+  // printFreeRAM(F("Free memory show time is: %d"));
 }
 
 void drawScreenRect()
