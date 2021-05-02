@@ -199,7 +199,7 @@ void drawSensorValue(float value, uint16_t color, uint8_t line)
   const uint16_t boxSizeX = 70;
   const uint16_t boxSizeY = 32;
 
-  char *textBuffer = new char[6];
+  char *textBuffer = new char[5];
   char *text = "%d.%d";
 
   sprintf(textBuffer, text, uint16_t((value * 10) / 10), uint16_t(uint16_t(value * 10) % 10));
