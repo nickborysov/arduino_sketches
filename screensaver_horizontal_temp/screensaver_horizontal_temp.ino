@@ -24,7 +24,7 @@ DateTime now;
 
 MCUFRIEND_kbv tft; // hard-wired for UNO shields anyway.
 int millisDiff;
-int16_t BOTTOM_PANEL = 50;
+int16_t BOTTOM_PANEL = 35;
 #define TEXT_SIZE 3
 #define Orientation 1 // PORTRAIT
 
@@ -71,6 +71,7 @@ void loop()
 {
   if (needToDrawTepmlates)
   {
+    drawPlotAxis();
     drawTemplates();
     needToDrawTepmlates = false;
   }
@@ -87,6 +88,28 @@ void loop()
     drawScreenRect();
   }
 }
+
+void drawPlotAxis()
+{
+  uint16_t startX = 25;
+  uint16_t startY = 115;
+  uint16_t sizeX = 270;
+  uint16_t sizeY = 80;
+
+  uint16_t textColor = TFT_DARKCYAN;
+
+  // draw x arrow
+  tft.drawLine(startX, startY, startX, startY + sizeY, textColor);
+  // tft.drawLine(startX, startY, startX - 5, startY + 25, textColor);
+  // tft.drawLine(startX, startY, startX + 5, startY + 25, textColor);
+
+  // draw y arrow
+  tft.drawLine(startX, startY + sizeY, startX + sizeX, startY + sizeY, textColor);
+  // tft.drawLine(startX + sizeX, startY + sizeY, startX + sizeX - 25, startY + sizeY - 5, textColor);
+  // tft.drawLine(startX + sizeX, startY + sizeY, startX + sizeX - 25, startY + sizeY + 5, textColor);
+}
+
+uint16_t plot_x_pos = 0;
 
 float getOneWireTemp()
 {
@@ -129,7 +152,7 @@ void printLocalTemp()
 
   float oneWireTemp = getOneWireTemp();
   // Compute heat index in Celsius (isFahreheit = false)
-  float oneWireHic = dht.computeHeatIndex(oneWireTemp, hum, false);
+  // float oneWireHic = dht.computeHeatIndex(oneWireTemp, hum, false);
 
   if (oldValues[0] != hum)
   {
@@ -144,25 +167,41 @@ void printLocalTemp()
     drawSensorValue(temp, TFT_GREEN, 1);
   }
 
-  if (oldValues[2] != hic)
-  {
-    oldValues[2] = hic;
-    drawSensorValue(hic, TFT_DARKCYAN, 2);
-  }
+  // if (oldValues[2] != hic)
+  // {
+  //   oldValues[2] = hic;
+  //   drawSensorValue(hic, TFT_DARKCYAN, 2);
+  // }
 
-  
   if (oldValues[3] != oneWireTemp)
   {
     oldValues[3] = oneWireTemp;
-    drawSensorValue(oneWireTemp, TFT_GREENYELLOW, 3);
+    drawSensorValue(oneWireTemp, TFT_DARKCYAN, 2);
   }
-  
-  if (oldValues[4] != oneWireHic)
+
+  // if (oldValues[4] != oneWireHic)
+  // {
+  //   oldValues[4] = oneWireHic;
+  //   drawSensorValue(oneWireHic, TFT_CYAN, 4);
+  // }
+
+  // start draw plot values
+  uint16_t startX = 25;
+  uint16_t startY = 115;
+  uint16_t sizeX = 270;
+  uint16_t sizeY = 80;
+  plot_x_pos++;
+  if (plot_x_pos == 270)
   {
-    oldValues[4] = oneWireHic;
-    drawSensorValue(oneWireHic, TFT_CYAN, 4);
+    plot_x_pos = 1;
   }
-  
+  tft.fillRect(plot_x_pos + startX, startY, 1, sizeY - 1, TFT_BLACK);
+
+  tft.drawPixel(startX + plot_x_pos, (startY + sizeY - 1) - (sizeY * hum / 100), TFT_BLUE);
+  tft.drawPixel(startX + plot_x_pos, (startY + sizeY - 1) - (sizeY * temp / 100), TFT_GREEN);
+  tft.drawPixel(startX + plot_x_pos, (startY + sizeY - 1) - (sizeY * oneWireTemp / 100), TFT_DARKCYAN);
+  // end draw plot values
+
   printFreeRAM(F("on end printLocalTemp %d"));
 }
 
@@ -170,9 +209,9 @@ void drawTemplates()
 {
   drawSensorTemplate("Humid:", TFT_BLUE, humBitmapArray, 0);
   drawSensorTemplate("Temp 1:", TFT_GREEN, tempBitmapArray, 1);
-  drawSensorTemplate("Feel 1:", TFT_DARKCYAN, tempBitmapArray, 2);
-  drawSensorTemplate("Temp 2:", TFT_GREENYELLOW, tempBitmapArray, 3);
-  drawSensorTemplate("Feel 2:", TFT_CYAN, tempBitmapArray, 4);
+  // drawSensorTemplate("Feel 1:", TFT_DARKCYAN, tempBitmapArray, 2);
+  drawSensorTemplate("Temp 2:", TFT_DARKCYAN, tempBitmapArray, 2);
+  // drawSensorTemplate("Feel 2:", TFT_CYAN, tempBitmapArray, 4);
 }
 
 void drawSensorTemplate(const char *text, uint16_t color, const uint8_t *bitmap, uint8_t line)
@@ -228,7 +267,7 @@ void showTime()
     const uint16_t secondPositionX = 25 + 12 * 18;
     const uint16_t secondPositionSize = 2 * 18;
     tft.setCursor(secondPositionX, tft.height() - BOTTOM_PANEL);
-    tft.fillRect(secondPositionX, tft.height() - BOTTOM_PANEL, secondPositionSize, BOTTOM_PANEL - 28, TFT_BLACK);
+    tft.fillRect(secondPositionX, tft.height() - BOTTOM_PANEL, secondPositionSize, BOTTOM_PANEL - 13, TFT_BLACK);
 
     char *textBuffer = new char[2];
     sprintf(textBuffer, "%02d", current.second());
@@ -246,7 +285,7 @@ void showTime()
   tft.setTextColor(timeTextColor, timeTextColor);
   tft.setCursor(25, tft.height() - BOTTOM_PANEL);
 
-  tft.fillRect(25, tft.height() - BOTTOM_PANEL, tft.width() - 30, BOTTOM_PANEL - 28, TFT_BLACK);
+  tft.fillRect(25, tft.height() - BOTTOM_PANEL, tft.width() - 30, BOTTOM_PANEL - 13, TFT_BLACK);
   tft.print(textBuffer);
   delete textBuffer;
   // printFreeRAM(F("Free memory show time is: %d"));
