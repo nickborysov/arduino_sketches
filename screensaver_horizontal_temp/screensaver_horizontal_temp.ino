@@ -42,7 +42,7 @@ void setupRTC()
   RTC_DS3231 RTC;
   Wire.begin();
   RTC.begin();
-  // RTC.adjust(DateTime(__DATE__, __TIME__) + TimeSpan(14));
+  RTC.adjust(DateTime(__DATE__, __TIME__) + TimeSpan(14));
   now = RTC.now();
   millisDiff = millis();
 }
@@ -54,11 +54,10 @@ void setup()
   Serial.begin(9600);
 
   tft.reset();
-  tft.begin(tft.readID());
-
+  tft.begin(tft.readID()); // 37696
   tft.setRotation(Orientation);
   tft.fillScreen(TFT_BLACK);
-  tft.invertDisplay(true);
+  // tft.invertDisplay(true);
   tft.setTextSize(TEXT_SIZE);
   tft.setTextWrap(false);
 
